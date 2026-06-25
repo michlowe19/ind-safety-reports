@@ -322,8 +322,11 @@
     </div>
 
     <div class="sidebar-section">
+      <button class="btn btn-primary btn-full" onclick="archiveToTracker()" style="margin-bottom:6px;" title="Merge reviewed session rows into the permanent tracker for this study">
+        📥 Archive session to tracker
+      </button>
       <button class="btn btn-full" onclick="exportToExcel()" style="margin-bottom:6px;">
-        ⬇ Export Session to Excel
+        ⬇ Export session to Excel
       </button>
       <button class="btn btn-full" style="margin-bottom:6px;font-size:11px;color:var(--kci-blue);border-color:var(--kci-blue);" onclick="loadDemoData()">
         🧪 Load demo data
@@ -986,10 +989,11 @@ function renderTrackerStoredList() {
   if (!el) return;
   const keys = Object.keys(state.trackerStore);
   if (!keys.length) { el.innerHTML = ''; return; }
-  el.innerHTML = keys.map(k => `
+  el.innerHTML = `<div style="font-size:11px;color:var(--green);margin-bottom:4px;font-weight:500;">✓ Stored — no re-upload needed</div>` +
+    keys.map(k => `
     <div class="icf-stored-item">
       <span style="font-size:12px;">📊</span>
-      <span class="study-name">${k}</span>
+      <span class="study-name">${esc(k)}</span>
       <span class="icf-name">${state.trackerStore[k].rows.length} rows</span>
     </div>`).join('');
 }
@@ -1565,6 +1569,37 @@ function loadDemoData() {
   renderICFPanel();
   switchPanel('review');
   showToast(`Demo data loaded for "${study}" — ${demo.length} sample reports.`, 'success');
+}
+
+function archiveToTracker() {
+  if (!state.activeStudy) { showToast('Select a study first.', 'error'); return; }
+  const rows = state.sessionRows.flat();
+  if (!rows.length) { showToast('No session rows to archive.', 'error'); return; }
+
+  const existing = state.trackerStore[state.activeStudy] || { name: 'Tracker', rows: [] };
+  // Avoid duplicating rows already in the tracker (match by aer + preferredTerm)
+  const existingKeys = new Set(existing.rows.map(r => r.aer + '|' + r.preferredTerm));
+  const toAdd = rows.map(r => ({ ...r, source: 'historical' }))
+                    .filter(r => !existingKeys.has(r.aer + '|' + r.preferredTerm));
+
+  state.trackerStore[state.activeStudy] = {
+    name: existing.name,
+    rows: [...existing.rows, ...toAdd],
+  };
+  // Clear session for this study now that it's in the tracker
+  state.sessionRows = [];
+  delete state.sessionStore[state.activeStudy];
+  state.historicalRows = state.trackerStore[state.activeStudy].rows;
+  persist();
+
+  renderStudyList();
+  renderTrackerStoredList();
+  showFileTag('tracker-file-tag', `${state.trackerStore[state.activeStudy].name} (${state.historicalRows.length} rows)`, 'tracker');
+  updateCounts();
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
+  showToast(`${toAdd.length} row(s) archived to tracker for "${state.activeStudy}". ${rows.length - toAdd.length} duplicate(s) skipped.`, 'success');
 }
 
 function clearSession() {
