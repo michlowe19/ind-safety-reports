@@ -210,6 +210,16 @@
 
 
 
+    <!-- API Key -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Anthropic API Key</div>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="api-key-input" class="input-sm" placeholder="sk-ant-..." style="flex:1;font-size:11px;">
+        <button class="btn btn-sm" onclick="saveApiKey()">Save</button>
+      </div>
+      <div id="api-key-status" style="font-size:11px;color:var(--text-3);margin-top:5px;"></div>
+    </div>
+
     <!-- Study Selector -->
     <div class="sidebar-section">
       <div class="sidebar-label">Active Study / Drug</div>
@@ -572,6 +582,7 @@ function nextDSMCDateISO() {
 }
 
 const state = {
+  apiKey: '',
   activeStudy: '',
   studies: Object.keys(STUDY_META),
   sessionRows: [],
@@ -592,6 +603,7 @@ const state = {
     const saved = localStorage.getItem('ind_state');
     if (saved) {
       const s = JSON.parse(saved);
+      state.apiKey = s.apiKey || '';
       // Merge saved studies with built-ins
       const extras = (s.studies || []).filter(n => !state.studies.includes(n));
       state.studies = [...state.studies, ...extras];
@@ -603,6 +615,10 @@ const state = {
     }
   } catch(e) {}
 
+  if (state.apiKey) {
+    document.getElementById('api-key-input').value = '••••••••••••••••';
+    document.getElementById('api-key-status').textContent = 'API key loaded.';
+  }
   renderStudyDropdown();
   renderICFStoredList();
   renderTrackerStoredList();
@@ -615,6 +631,7 @@ const state = {
 function persist() {
   try {
     localStorage.setItem('ind_state', JSON.stringify({
+      apiKey: state.apiKey,
       studies: state.studies,
       icfStore: state.icfStore,
       trackerStore: state.trackerStore,
@@ -625,6 +642,17 @@ function persist() {
 }
 
 
+
+// ── API KEY ────────────────────────────────────────────────────────────────
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val || val.startsWith('•')) { showToast('Enter a valid API key.', 'error'); return; }
+  state.apiKey = val;
+  document.getElementById('api-key-input').value = '••••••••••••••••';
+  document.getElementById('api-key-status').textContent = 'Saved.';
+  persist();
+  showToast('API key saved.', 'success');
+}
 
 // ── STUDY MANAGEMENT ───────────────────────────────────────────────────────
 function renderStudyDropdown() {
@@ -930,6 +958,7 @@ function handlePDFUpload(e) {
 
 function renderPDFQueue() {
   const el = document.getElementById('pdf-queue');
+  if (!state.apiKey) { showToast('Enter your Anthropic API key first.', 'error'); return; }
   if (!state.pdfQueue.length) { el.innerHTML = ''; return; }
   el.innerHTML = state.pdfQueue.map((f, i) => `
     <div class="file-tag">
@@ -1030,9 +1059,14 @@ ${reportText.slice(0, 12000)}`;
 
   const messages = [{ role: 'user', content: userMessage }];
 
-  const resp = await fetch('/.netlify/functions/claude-proxy', {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': state.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-danger-allow-browser': 'true',
+    },
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, system: systemPrompt, messages })
   });
 
