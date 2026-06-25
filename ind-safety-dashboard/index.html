@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IND Safety Report Dashboard — KCI</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -960,8 +961,9 @@ async function processReports() {
     setProgress(10 + (i / state.pdfQueue.length) * 75);
 
     try {
-      const b64 = await fileToBase64(file);
-      const rows = await extractFromPDF(b64, icfData, ctepSummary);
+      const reportText = await extractTextFromPDF(file);
+      const icfText = icfData ? await extractTextFromPDFb64(icfData.b64) : null;
+      const rows = await extractFromPDF(reportText, icfText, ctepSummary);
       // rows is always an array — count prior occurrences per row
       rows.forEach(row => {
         row.priorCount = countPriorOccurrences(row.preferredTerm, newRows);
@@ -989,48 +991,44 @@ async function processReports() {
   showToast(`${newRows.length} report(s) extracted successfully.`, 'success');
 }
 
-async function extractFromPDF(b64, icfData, ctepSummary) {
-  const icfInstruction = icfData
-    ? `The current Informed Consent Form (ICF) for this study is also attached. For each AE term found, check if the ICF contains a matching lay term for that event. If a match is found, record the exact lay term phrase from the ICF. If no match, record "N/A" and reference the CTEP library for a recommended term.`
-    : `No ICF has been uploaded for this study. Mark ICF Terms as "N/A — ICF not uploaded".`;
+async function extractFromPDF(reportText, icfText, ctepSummary) {
+  const icfInstruction = icfText
+    ? `The ICF text for this study is provided below. For each AE term, check if the ICF contains a matching lay term. If found, record the exact lay term phrase. If not, record "N/A (recommended: [CTEP term])" using the CTEP library.
+
+ICF TEXT:
+${icfText ? icfText.slice(0, 8000) : ''}`
+    : `No ICF has been uploaded for this study. Set icfTerms to "N/A — ICF not uploaded" and localChange to blank.`;
 
   const systemPrompt = `You are a clinical trials safety specialist extracting structured data from FDA IND safety reports (MedWatch 3500A, CIOMS, or narrative formats).
 
-Extract all fields with precision. Return ONLY valid JSON — no markdown, no preamble.
+Extract all fields with precision. Return ONLY a valid JSON array — no markdown, no preamble, no explanation.
 
 ${ctepSummary}
 
 ${icfInstruction}
 
-Return this exact JSON structure (one entry per adverse event in the report):
-{
-  "aer": "AER or report number",
-  "reportDate": "date as written",
-  "reportType": "Initial or FU1/FU2/etc",
-  "sponsor": "sponsor name if present",
-  "verbatim": "verbatim event term as written in report",
-  "preferredTerm": "MedDRA preferred term or best medical term",
-  "seriousness": "Fatal | Life-Threatening | IME | Hospitalization | Other (as listed)",
-  "unexpected": "Yes or No",
+Return a JSON array where each element represents one adverse event:
+[{
+  "aer": "AER or manufacturer control number",
+  "reportDate": "date of this report as written",
+  "reportType": "Initial or FU1/FU2/FU3/etc (check report type field)",
+  "verbatim": "verbatim event term exactly as written",
+  "preferredTerm": "MedDRA preferred term",
+  "seriousness": "Fatal | Life-Threatening | IME | Hospitalization (pick from seriousness checkboxes)",
+  "unexpected": "Yes if unlisted/unexpected, No if listed/expected",
   "reporterCausality": "Related | Possibly Related | Unlikely Related | Unrelated | Unknown",
   "companyCausality": "Related | Possibly Related | Unlikely Related | Unrelated | Unknown",
-  "icfTerms": "matched lay term from ICF, or N/A, or N/A (recommended: [CTEP term])",
-  "localChange": "No if ICF match found, otherwise leave blank for DSMC decision"
-}
+  "icfTerms": "matched lay term from ICF, or N/A, or N/A (recommended: CTEP term)",
+  "localChange": "No if ICF match found, blank string if no match"
+}]
 
-If there are multiple AEs in one report, return an array of these objects. If only one AE, still return an array with one element.`;
+Always return an array even for a single AE. Never return a plain object.`;
 
-  const messages = [{ role: 'user', content: [] }];
+  const userMessage = `Extract all adverse events from this IND safety report:
 
-  // Attach the PDF
-  messages[0].content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
+${reportText.slice(0, 12000)}`;
 
-  // Attach ICF if available
-  if (icfData) {
-    messages[0].content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: icfData.b64 } });
-  }
-
-  messages[0].content.push({ type: 'text', text: 'Extract all adverse event data from this IND safety report per the instructions.' });
+  const messages = [{ role: 'user', content: userMessage }];
 
   const resp = await fetch('/api/claude', {
     method: 'POST',
@@ -1380,6 +1378,34 @@ function fileToBase64(file) {
     r.onerror = () => rej(new Error('File read error'));
     r.readAsDataURL(file);
   });
+}
+
+async function extractTextFromPDF(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return fullText;
+}
+
+async function extractTextFromPDFb64(b64) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return fullText;
 }
 
 function showOverlay(show, title='', msg='') {

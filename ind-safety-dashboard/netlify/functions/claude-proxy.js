@@ -5,7 +5,7 @@ exports.handler = async function(event) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured on server.' }) };
+    return { statusCode: 500, body: JSON.stringify({ error: { message: 'API key not configured on server.' } }) };
   }
 
   try {
@@ -17,7 +17,6 @@ exports.handler = async function(event) {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
       },
       body: JSON.stringify(body),
     });
