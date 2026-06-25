@@ -304,6 +304,9 @@
       <button class="btn btn-full" onclick="exportToExcel()" style="margin-bottom:6px;">
         ⬇ Export Session to Excel
       </button>
+      <button class="btn btn-full" style="margin-bottom:6px;font-size:11px;color:var(--kci-blue);border-color:var(--kci-blue);" onclick="loadDemoData()">
+        🧪 Load demo data
+      </button>
       <button class="btn btn-full" style="font-size:11px;color:var(--text-3);" onclick="clearSession()">
         Clear session data
       </button>
@@ -1447,6 +1450,32 @@ function updateCounts() {
 }
 
 // ── CLEAR SESSION ───────────────────────────────────────────────────────────
+function loadDemoData() {
+  if (!state.activeStudy) { showToast('Select a study first.', 'error'); return; }
+  const study = state.activeStudy;
+  const today = new Date();
+  function daysAgo(n) {
+    const d = new Date(today); d.setDate(d.getDate() - n);
+    return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+  const demo = [
+    { aer:'AER-2024-001', reportDate: daysAgo(60), reportType:'Initial', verbatim:'nausea and vomiting', preferredTerm:'Nausea', seriousness:'Hospitalization', unexpected:'Yes', reporterCausality:'Possibly Related', companyCausality:'Possibly Related', dsmcDate:'', icfTerms:'N/A (recommended: Nausea)', localChange:'', source:'session', study, priorCount:0 },
+    { aer:'AER-2024-001', reportDate: daysAgo(30), reportType:'FU1', verbatim:'nausea and vomiting', preferredTerm:'Nausea', seriousness:'Hospitalization', unexpected:'Yes', reporterCausality:'Possibly Related', companyCausality:'Possibly Related', dsmcDate:'', icfTerms:'N/A (recommended: Nausea)', localChange:'', source:'session', study, priorCount:1 },
+    { aer:'AER-2024-002', reportDate: daysAgo(45), reportType:'Initial', verbatim:'severe fatigue', preferredTerm:'Fatigue', seriousness:'IME', unexpected:'No', reporterCausality:'Related', companyCausality:'Related', dsmcDate:'', icfTerms:'Tiredness or fatigue', localChange:'No', source:'session', study, priorCount:0 },
+    { aer:'AER-2024-003', reportDate: daysAgo(20), reportType:'Initial', verbatim:'rash on arms and trunk', preferredTerm:'Rash', seriousness:'IME', unexpected:'Yes', reporterCausality:'Related', companyCausality:'Possibly Related', dsmcDate:'', icfTerms:'N/A (recommended: Skin rash)', localChange:'', source:'session', study, priorCount:0 },
+    { aer:'AER-2024-004', reportDate: daysAgo(10), reportType:'Initial', verbatim:'decreased white blood cell count', preferredTerm:'Neutropenia', seriousness:'Life-Threatening', unexpected:'No', reporterCausality:'Related', companyCausality:'Related', dsmcDate:'', icfTerms:'Low white blood cell count', localChange:'No', source:'session', study, priorCount:0 },
+    { aer:'AER-2024-005', reportDate: daysAgo(5), reportType:'Initial', verbatim:'shortness of breath', preferredTerm:'Dyspnoea', seriousness:'Hospitalization', unexpected:'Yes', reporterCausality:'Possibly Related', companyCausality:'Unrelated', dsmcDate:'', icfTerms:'N/A (recommended: Shortness of breath)', localChange:'', source:'session', study, priorCount:0 },
+  ];
+  state.sessionRows.push(...demo);
+  if (state.activeStudy) { state.sessionStore[state.activeStudy] = state.sessionRows.flat(); persist(); }
+  updateCounts();
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
+  switchPanel('review');
+  showToast(`Demo data loaded for "${study}" — ${demo.length} sample reports.`, 'success');
+}
+
 function clearSession() {
   if (!confirm('Clear session report data? Stored trackers, ICFs, and CTEP library will remain.')) return;
   state.sessionRows = [];
