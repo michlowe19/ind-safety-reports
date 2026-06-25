@@ -3,9 +3,14 @@ exports.handler = async function(event) {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Use server-side env var if set, otherwise accept key from client header
+  const apiKey = process.env.ANTHROPIC_API_KEY || event.headers['x-client-api-key'];
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: { message: 'API key not configured on server.' } }) };
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: { message: 'No API key configured. Set ANTHROPIC_API_KEY in Netlify env vars or enter it in the dashboard.' } }),
+    };
   }
 
   try {
@@ -31,6 +36,7 @@ exports.handler = async function(event) {
   } catch (err) {
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: { message: err.message } }),
     };
   }

@@ -1017,7 +1017,12 @@ async function processReports() {
   renderAggregatePanel();
   renderICFPanel();
   switchPanel('review');
-  showToast(`${newRows.length} report(s) extracted successfully.`, 'success');
+
+  if (newRows.length === 0) {
+    showToast('No data extracted — check the browser console (F12) for the error details.', 'error');
+  } else {
+    showToast(`${newRows.length} report(s) extracted successfully.`, 'success');
+  }
 }
 
 async function extractFromPDF(reportText, icfText, ctepSummary) {
@@ -1059,13 +1064,11 @@ ${reportText.slice(0, 12000)}`;
 
   const messages = [{ role: 'user', content: userMessage }];
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await fetch('/api/claude', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': state.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-danger-allow-browser': 'true',
+      'x-client-api-key': state.apiKey,
     },
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, system: systemPrompt, messages })
   });
@@ -1077,13 +1080,19 @@ ${reportText.slice(0, 12000)}`;
   }
   const data = await resp.json();
   console.log('API response:', JSON.stringify(data).slice(0, 500));
-  const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
-  console.log('Extracted text:', text.slice(0, 300));
+  const rawText = data.content.map(b => b.text || '').join('');
+  console.log('Raw text:', rawText.slice(0, 300));
+  // Extract JSON array robustly — find the first [ ... ] block even if Claude adds preamble text
+  const arrayMatch = rawText.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) {
+    console.error('No JSON array found in response. Full text:', rawText.slice(0, 1000));
+    throw new Error('Claude did not return a JSON array. Check console for full response.');
+  }
   let parsed;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(arrayMatch[0]);
   } catch(e) {
-    console.error('JSON parse error:', e.message, '\nText was:', text.slice(0, 500));
+    console.error('JSON parse error:', e.message, '\nText was:', arrayMatch[0].slice(0, 500));
     throw new Error('JSON parse failed: ' + e.message);
   }
   if (!Array.isArray(parsed)) parsed = [parsed];
