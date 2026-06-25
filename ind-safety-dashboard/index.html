@@ -331,6 +331,11 @@
             <option value="Follow-up">Follow-up</option>
           </select>
         </div>
+        <div class="filter-row">
+          <span class="filter-label">DSMC date:</span>
+          <input type="date" id="bulk-dsmc-date" class="input-sm">
+          <button class="btn btn-sm" onclick="setAllDSMCDates()">Set for all</button>
+        </div>
         <button class="btn btn-sm" onclick="exportToExcel()">⬇ Export</button>
       </div>
       <div class="main-content">
@@ -372,6 +377,7 @@
     <div class="panel" id="panel-aggregate">
       <div class="main-toolbar">
         <span class="toolbar-title">Aggregate AE Analysis</span>
+        <input type="text" id="agg-search" class="input-sm" placeholder="Search terms..." oninput="renderAggregatePanel()" style="width:160px;">
         <select class="select-sm" id="agg-filter-causality" onchange="renderAggregatePanel()">
           <option value="">All causality</option>
           <option value="Related">Related</option>
@@ -594,6 +600,7 @@ const state = {
   pdfQueue: [],
   studyMeta: {},      // user overrides keyed by study name
   trackerStore: {},   // { studyName: { name, rows[] } } — persisted
+  sessionStore: {},   // { studyName: rows[] } — extracted rows persisted per study
 };
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -612,6 +619,7 @@ const state = {
       state.ctepLoaded = (state.ctepLibrary.length > 0);
       state.studyMeta = s.studyMeta || {};
       state.trackerStore = s.trackerStore || {};
+      state.sessionStore = s.sessionStore || {};
     }
   } catch(e) {}
 
@@ -635,6 +643,7 @@ function persist() {
       studies: state.studies,
       icfStore: state.icfStore,
       trackerStore: state.trackerStore,
+      sessionStore: state.sessionStore,
       ctepLibrary: state.ctepLibrary,
       studyMeta: state.studyMeta,
     }));
@@ -685,6 +694,11 @@ function selectStudy(name) {
   document.getElementById('active-study-badge').textContent = name || 'No study selected';
   updateICFTagForStudy();
   loadTrackerForStudy(name);
+  state.sessionRows = (name && state.sessionStore[name]) ? [...state.sessionStore[name]] : [];
+  updateCounts();
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
   populateCoverFields();
 }
 
@@ -993,8 +1007,16 @@ async function processReports() {
       const reportText = await extractTextFromPDF(file);
       const icfText = icfData ? await extractTextFromPDFb64(icfData.b64) : null;
       const rows = await extractFromPDF(reportText, icfText, ctepSummary);
-      // rows is always an array — count prior occurrences per row
+      // Override ICF terms with previously decided values for known preferred terms
       rows.forEach(row => {
+        const knownMatch = [...state.historicalRows, ...newRows].find(r =>
+          r.preferredTerm.toLowerCase().trim() === row.preferredTerm.toLowerCase().trim()
+          && r.icfTerms && !r.icfTerms.startsWith('N/A') && r.icfTerms !== ''
+        );
+        if (knownMatch) {
+          row.icfTerms = knownMatch.icfTerms;
+          if (!row.localChange) row.localChange = knownMatch.localChange || 'No';
+        }
         row.priorCount = countPriorOccurrences(row.preferredTerm, newRows);
         newRows.push(row);
       });
@@ -1008,6 +1030,10 @@ async function processReports() {
   setStep('Finalizing...');
 
   state.sessionRows.push(...newRows);
+  if (state.activeStudy) {
+    state.sessionStore[state.activeStudy] = state.sessionRows.flat();
+    persist();
+  }
   state.pdfQueue = [];
   renderPDFQueue();
 
@@ -1266,7 +1292,11 @@ function renderAggregatePanel() {
   const sorted = Object.entries(counts).sort((a, b) => b[1].total - a[1].total);
   const maxCount = sorted.length ? sorted[0][1].total : 1;
 
-  // Stats
+  // Apply search filter
+  const searchVal = (document.getElementById('agg-search')?.value || '').toLowerCase().trim();
+  const visible = searchVal ? sorted.filter(([pt]) => pt.toLowerCase().includes(searchVal)) : sorted;
+
+  // Stats (always from full sorted list, not filtered by search)
   const uniquePTs = sorted.length;
   const totalAEs = filtered.length;
   const unexpectedCount = filtered.filter(r => r.unexpected === 'Yes').length;
@@ -1283,8 +1313,12 @@ function renderAggregatePanel() {
     document.getElementById('agg-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">No data available. Upload a tracker or process reports.</td></tr>`;
     return;
   }
+  if (!visible.length) {
+    document.getElementById('agg-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">No terms match "${esc(searchVal)}".</td></tr>`;
+    return;
+  }
 
-  document.getElementById('agg-tbody').innerHTML = sorted.map(([pt, c]) => `
+  document.getElementById('agg-tbody').innerHTML = visible.map(([pt, c]) => `
     <tr>
       <td><strong>${esc(pt)}</strong></td>
       <td style="text-align:center;font-weight:600;">${c.total}</td>
@@ -1380,6 +1414,17 @@ function exportToExcel() {
 }
 
 // ── PANEL NAVIGATION ────────────────────────────────────────────────────────
+function setAllDSMCDates() {
+  const val = document.getElementById('bulk-dsmc-date').value;
+  if (!val) { showToast('Pick a date first.', 'error'); return; }
+  const d = new Date(val + 'T12:00:00');
+  const formatted = (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  state.sessionRows.flat().forEach(r => r.dsmcDate = formatted);
+  if (state.activeStudy) { state.sessionStore[state.activeStudy] = state.sessionRows.flat(); persist(); }
+  renderReviewTable();
+  showToast('DSMC review date set for all reports.', 'success');
+}
+
 function switchPanel(name) {
   ['review', 'aggregate', 'icf', 'cover'].forEach(p => {
     document.getElementById('panel-' + p).classList.toggle('active', p === name);
@@ -1387,7 +1432,14 @@ function switchPanel(name) {
   });
   if (name === 'aggregate') renderAggregatePanel();
   if (name === 'icf') renderICFPanel();
-  if (name === 'cover') refreshCoverPreview();
+  if (name === 'cover') {
+    const aerStr = buildAERString();
+    if (aerStr) document.getElementById('cover-aers').value = aerStr;
+    const icfAuto = autoDetectICFUpdate();
+    if (icfAuto === 'Yes') document.getElementById('cover-icf-yes').checked = true;
+    else document.getElementById('cover-icf-no').checked = true;
+    refreshCoverPreview();
+  }
 }
 
 function updateCounts() {
@@ -1398,6 +1450,7 @@ function updateCounts() {
 function clearSession() {
   if (!confirm('Clear session report data? Stored trackers, ICFs, and CTEP library will remain.')) return;
   state.sessionRows = [];
+  if (state.activeStudy) { delete state.sessionStore[state.activeStudy]; persist(); }
   state.pdfQueue = [];
   document.getElementById('pdf-queue').innerHTML = '';
   // Reload historical rows for current study from store
