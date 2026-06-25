@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IND Safety Report Dashboard — KCI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface2: #f0eeea;
+    --border: #e0ddd6;
+    --border-strong: #c8c5bc;
+    --text: #1a1917;
+    --text-2: #5a5854;
+    --text-3: #8a8782;
+    --kci-navy: #0a2240;
+    --kci-blue: #1a5ca8;
+    --kci-light: #e8f0fb;
+    --accent: #c8102e;
+    --accent-light: #fdecea;
+    --green: #1a6e3c;
+    --green-light: #eaf5ef;
+    --amber: #8a5c00;
+    --amber-light: #fdf5e6;
+    --purple: #4a3598;
+    --purple-light: #eeebfb;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+
+  .app-header { background: var(--kci-navy); color: white; padding: 0 24px; display: flex; align-items: center; gap: 16px; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .app-header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .app-header .subtitle { font-size: 12px; color: rgba(255,255,255,0.55); margin-left: 2px; }
+  .header-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.2); }
+  .header-spacer { flex: 1; }
+  .study-badge { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: rgba(255,255,255,0.85); }
+
+  .layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+
+  .sidebar { width: 280px; min-width: 280px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+
+  .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-section:last-child { border-bottom: none; }
+  .sidebar-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; }
+
+  .study-selector { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--surface); color: var(--text); outline: none; }
+  .study-selector:focus { border-color: var(--kci-blue); }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: var(--radius); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: all 0.15s; white-space: nowrap; }
+  .btn:hover { background: var(--surface2); border-color: var(--border-strong); }
+  .btn-primary { background: var(--kci-blue); border-color: var(--kci-blue); color: white; }
+  .btn-primary:hover { background: #154f96; border-color: #154f96; }
+  .btn-danger { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-danger:hover { background: #a50d26; }
+  .btn-sm { padding: 5px 9px; font-size: 11px; }
+  .btn-full { width: 100%; justify-content: center; }
+  .btn svg, .btn .icon { width: 14px; height: 14px; }
+
+  .upload-zone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius); padding: 14px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
+  .upload-zone:hover { border-color: var(--kci-blue); background: var(--kci-light); }
+  .upload-zone.drag-over { border-color: var(--kci-blue); background: var(--kci-light); }
+  .upload-zone p { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+  .upload-zone strong { font-size: 13px; color: var(--text); }
+  .upload-zone input { display: none; }
+
+  .file-tag { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--green-light); border: 1px solid #b3ddc4; border-radius: 6px; font-size: 11px; color: var(--green); margin-top: 6px; }
+  .file-tag .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-tag .remove { cursor: pointer; color: var(--text-3); font-size: 14px; line-height: 1; padding: 0 2px; }
+  .file-tag .remove:hover { color: var(--accent); }
+
+  .nav-tabs { display: flex; flex-direction: column; gap: 2px; }
+  .nav-tab { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); font-size: 13px; transition: all 0.15s; border: none; background: none; text-align: left; width: 100%; }
+  .nav-tab:hover { background: var(--surface2); color: var(--text); }
+  .nav-tab.active { background: var(--kci-light); color: var(--kci-blue); font-weight: 500; }
+  .nav-tab .tab-count { margin-left: auto; background: var(--border); border-radius: 10px; padding: 1px 7px; font-size: 10px; color: var(--text-3); }
+  .nav-tab.active .tab-count { background: var(--kci-blue); color: white; }
+
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  .main-toolbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: 0; z-index: 50; }
+  .toolbar-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; min-width: 150px; }
+
+  .main-content { padding: 20px; flex: 1; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-3); }
+  .empty-state .icon-lg { font-size: 40px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 15px; color: var(--text-2); margin-bottom: 6px; }
+  .empty-state p { font-size: 13px; max-width: 320px; margin: 0 auto; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+  .stat-card .label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .stat-card .value { font-size: 24px; font-weight: 600; color: var(--text); }
+  .stat-card .value.red { color: var(--accent); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.amber { color: var(--amber); }
+  .stat-card .sublabel { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 16px; }
+  .card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .card-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .card-body { padding: 16px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: var(--surface2); padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.new-row { background: #f0f7ff; }
+  tbody tr.new-row:hover { background: #e4f0fc; }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .badge-red { background: var(--accent-light); color: var(--accent); }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-amber { background: var(--amber-light); color: var(--amber); }
+  .badge-blue { background: var(--kci-light); color: var(--kci-blue); }
+  .badge-purple { background: var(--purple-light); color: var(--purple); }
+  .badge-gray { background: var(--surface2); color: var(--text-2); }
+
+  .select-sm { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--surface); color: var(--text); outline: none; }
+  .select-sm:focus { border-color: var(--kci-blue); }
+
+  .icf-status-match { color: var(--green); font-weight: 500; }
+  .icf-status-missing { color: var(--accent); font-weight: 500; }
+  .icf-status-na { color: var(--text-3); }
+
+  .processing-overlay { position: fixed; inset: 0; background: rgba(10,34,64,0.7); display: flex; align-items: center; justify-content: center; z-index: 999; display: none; }
+  .processing-card { background: var(--surface); border-radius: var(--radius-lg); padding: 32px 40px; text-align: center; max-width: 360px; }
+  .processing-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .processing-card p { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--kci-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 12px; }
+  .progress-fill { height: 100%; background: var(--kci-blue); border-radius: 2px; transition: width 0.3s; }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--kci-navy); color: white; padding: 12px 18px; border-radius: var(--radius); font-size: 13px; z-index: 1000; opacity: 0; transform: translateY(8px); transition: all 0.25s; pointer-events: none; max-width: 320px; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--green); }
+  .toast.error { background: var(--accent); }
+
+  .input-sm { padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; outline: none; background: var(--surface); color: var(--text); }
+  .input-sm:focus { border-color: var(--kci-blue); }
+
+
+  .icf-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+  .agg-table-wrap { max-height: 400px; overflow-y: auto; }
+
+  .freq-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .freq-bar { height: 6px; background: var(--kci-blue); border-radius: 3px; min-width: 4px; opacity: 0.7; }
+
+  .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .new-study-form { display: flex; gap: 8px; margin-top: 8px; }
+  .new-study-form input { flex: 1; }
+
+  .icf-stored-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .icf-stored-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--surface2); border-radius: 6px; font-size: 11px; }
+  .icf-stored-item .study-name { flex: 1; font-weight: 500; }
+  .icf-stored-item .icf-name { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .section-header h2 { font-size: 15px; font-weight: 600; }
+
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filter-label { font-size: 11px; color: var(--text-3); }
+
+  .editable-cell { cursor: pointer; }
+  .editable-cell:hover { background: var(--kci-light); }
+  .cell-input { width: 100%; padding: 2px 4px; border: 1px solid var(--kci-blue); border-radius: 4px; font-size: 12px; outline: none; }
+
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; height: auto; }
+    .sidebar { width: 100%; min-width: 0; height: auto; overflow-y: visible; }
+    .detail-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:1px">Karmanos Cancer Institute</div>
+    <h1>IND Safety Report Dashboard</h1>
+  </div>
+  <div class="header-divider"></div>
+  <span class="subtitle">DSMC Review Tool</span>
+  <div class="header-spacer"></div>
+  <span class="study-badge" id="active-study-badge">No study selected</span>
+</header>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+
+
+    <!-- Study Selector -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Active Study / Drug</div>
+      <select class="study-selector" id="study-select" onchange="selectStudy(this.value)">
+        <option value="">— Select study —</option>
+      </select>
+      <div class="new-study-form">
+        <input type="text" id="new-study-input" class="input-sm" placeholder="Add new study..." style="font-size:11px;">
+        <button class="btn btn-sm" onclick="addStudy()">Add</button>
+      </div>
+    </div>
+
+    <!-- Upload Tracker -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Historical Tracker (Excel)</div>
+      <div class="upload-zone" id="tracker-zone" onclick="document.getElementById('tracker-input').click()" ondragover="handleDrag(event,'tracker-zone')" ondragleave="clearDrag('tracker-zone')" ondrop="handleDrop(event,'tracker')">
+        <input type="file" id="tracker-input" accept=".xlsx,.xls,.csv" onchange="handleTrackerUpload(event)">
+        <strong>Upload tracker</strong>
+        <p>.xlsx / .xls / .csv</p>
+      </div>
+      <div id="tracker-file-tag"></div>
+      <div id="tracker-stored-list" class="icf-stored-list"></div>
+    </div>
+
+    <!-- Upload ICF -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Informed Consent Form (PDF)</div>
+      <div class="upload-zone" id="icf-zone" onclick="document.getElementById('icf-input').click()" ondragover="handleDrag(event,'icf-zone')" ondragleave="clearDrag('icf-zone')" ondrop="handleDrop(event,'icf')">
+        <input type="file" id="icf-input" accept=".pdf" onchange="handleICFUpload(event)">
+        <strong>Upload ICF</strong>
+        <p>.pdf — stored per study</p>
+      </div>
+      <div id="icf-file-tag"></div>
+      <div id="icf-stored-list" class="icf-stored-list"></div>
+    </div>
+
+    <!-- Upload CTEP Library -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">CTEP/CTCAE IC Terms Library</div>
+      <div class="upload-zone" id="ctep-zone" onclick="document.getElementById('ctep-input').click()" ondragover="handleDrag(event,'ctep-zone')" ondragleave="clearDrag('ctep-zone')" ondrop="handleDrop(event,'ctep')">
+        <input type="file" id="ctep-input" accept=".xlsx,.xls,.csv" onchange="handleCTEPUpload(event)">
+        <strong>Upload CTEP library</strong>
+        <p>.xlsx — persisted in browser</p>
+      </div>
+      <div id="ctep-file-tag"></div>
+    </div>
+
+    <!-- Upload IND Reports -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Process IND Safety Reports</div>
+      <div class="upload-zone" id="pdf-zone" onclick="document.getElementById('pdf-input').click()" ondragover="handleDrag(event,'pdf-zone')" ondragleave="clearDrag('pdf-zone')" ondrop="handleDrop(event,'pdf')">
+        <input type="file" id="pdf-input" accept=".pdf" multiple onchange="handlePDFUpload(event)">
+        <strong>Upload report PDFs</strong>
+        <p>Multiple files accepted</p>
+      </div>
+      <div id="pdf-queue" style="margin-top:6px;"></div>
+      <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="processReports()">
+        ⚡ Extract &amp; Analyze
+      </button>
+    </div>
+
+    <!-- Nav -->
+    <div class="sidebar-section" style="flex:1;">
+      <div class="sidebar-label">Views</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="switchPanel('review')" id="tab-review">
+          📋 Report Review <span class="tab-count" id="count-review">0</span>
+        </button>
+        <button class="nav-tab" onclick="switchPanel('aggregate')" id="tab-aggregate">
+          📊 Aggregate Analysis <span class="tab-count" id="count-aggregate">0</span>
+        </button>
+        <button class="nav-tab" onclick="switchPanel('icf')" id="tab-icf">
+          📄 ICF Gap Analysis <span class="tab-count" id="count-icf">0</span>
+        </button>
+        <button class="nav-tab" onclick="switchPanel('cover')" id="tab-cover">
+          📝 DSMC Cover Page
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <button class="btn btn-full" onclick="exportToExcel()" style="margin-bottom:6px;">
+        ⬇ Export Session to Excel
+      </button>
+      <button class="btn btn-full" style="font-size:11px;color:var(--text-3);" onclick="clearSession()">
+        Clear session data
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- REVIEW PANEL -->
+    <div class="panel active" id="panel-review">
+      <div class="main-toolbar">
+        <span class="toolbar-title">Report Review</span>
+        <div class="filter-row">
+          <span class="filter-label">Filter:</span>
+          <select class="select-sm" id="filter-unexpected" onchange="renderReviewTable()">
+            <option value="">All reports</option>
+            <option value="Yes">Unexpected only</option>
+            <option value="No">Expected only</option>
+          </select>
+          <select class="select-sm" id="filter-type" onchange="renderReviewTable()">
+            <option value="">All types</option>
+            <option value="Initial">Initial</option>
+            <option value="Follow-up">Follow-up</option>
+          </select>
+        </div>
+        <button class="btn btn-sm" onclick="exportToExcel()">⬇ Export</button>
+      </div>
+      <div class="main-content">
+        <div class="stats-row" id="review-stats"></div>
+        <div class="card">
+          <div class="card-header">
+            <h3>AE Report Tracker</h3>
+            <span style="font-size:11px;color:var(--text-3);">New rows highlighted in blue · Click DSMC fields to edit</span>
+          </div>
+          <div class="table-wrap">
+            <table id="review-table">
+              <thead>
+                <tr>
+                  <th>AER #</th>
+                  <th>Report Date</th>
+                  <th>Report Type</th>
+                  <th>Verbatim Term</th>
+                  <th>Preferred Term</th>
+                  <th>Seriousness</th>
+                  <th>Unexpected?</th>
+                  <th>Reporter Causality</th>
+                  <th>Company Causality</th>
+                  <th>DSMC Review Date</th>
+                  <th>ICF Terms</th>
+                  <th>Local Change Required?</th>
+                  <th>Prior Occurrences</th>
+                </tr>
+              </thead>
+              <tbody id="review-tbody">
+                <tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-3);">Upload and process IND safety reports to populate this table.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AGGREGATE PANEL -->
+    <div class="panel" id="panel-aggregate">
+      <div class="main-toolbar">
+        <span class="toolbar-title">Aggregate AE Analysis</span>
+        <select class="select-sm" id="agg-filter-causality" onchange="renderAggregatePanel()">
+          <option value="">All causality</option>
+          <option value="Related">Related</option>
+          <option value="Possibly Related">Possibly Related</option>
+          <option value="Unrelated">Unrelated</option>
+        </select>
+        <select class="select-sm" id="agg-filter-unexpected" onchange="renderAggregatePanel()">
+          <option value="">All</option>
+          <option value="Yes">Unexpected only</option>
+        </select>
+      </div>
+      <div class="main-content">
+        <div id="agg-stats" class="stats-row"></div>
+        <div class="card">
+          <div class="card-header"><h3>AE Term Frequency</h3><span style="font-size:11px;color:var(--text-3);">Historical + session combined</span></div>
+          <div class="agg-table-wrap">
+            <table id="agg-table">
+              <thead>
+                <tr>
+                  <th>Preferred Term</th>
+                  <th>Total</th>
+                  <th>Historical</th>
+                  <th>This Session</th>
+                  <th>Unexpected</th>
+                  <th>Frequency</th>
+                </tr>
+              </thead>
+              <tbody id="agg-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">Upload a tracker and/or process reports to see aggregate data.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ICF GAP PANEL -->
+    <div class="panel" id="panel-icf">
+      <div class="main-toolbar">
+        <span class="toolbar-title">ICF Gap Analysis</span>
+        <select class="select-sm" id="icf-filter" onchange="renderICFPanel()">
+          <option value="">All terms</option>
+          <option value="missing">Missing from ICF only</option>
+          <option value="matched">Matched only</option>
+        </select>
+      </div>
+      <div class="main-content">
+        <div id="icf-stats" class="stats-row"></div>
+        <div class="card">
+          <div class="card-header">
+            <h3>ICF Term Coverage</h3>
+            <span style="font-size:11px;color:var(--text-3);">Terms from current session reports vs. ICF &amp; CTEP library</span>
+          </div>
+          <div class="table-wrap">
+            <table id="icf-table">
+              <thead>
+                <tr>
+                  <th>AER #</th>
+                  <th>Preferred Term</th>
+                  <th>ICF Match Status</th>
+                  <th>ICF Lay Term Found</th>
+                  <th>CTEP Recommended Term</th>
+                  <th>Local Change Required?</th>
+                </tr>
+              </thead>
+              <tbody id="icf-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">Process reports with an ICF uploaded to see gap analysis.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- COVER PAGE PANEL -->
+    <div class="panel" id="panel-cover">
+      <div class="main-toolbar">
+        <span class="toolbar-title">DSMC Cover Page Generator</span>
+        <span style="font-size:11px;color:var(--text-3);">Study metadata pre-loaded &middot; DSMC meets 3rd Thursday monthly</span>
+        <button class="btn btn-sm btn-primary" onclick="generateCoverPage()">&#x2B07; Generate Word Doc</button>
+      </div>
+      <div class="main-content">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;">
+
+          <!-- Left: Study metadata editor -->
+          <div class="card">
+            <div class="card-header"><h3>Study Details</h3><span style="font-size:11px;color:var(--text-3);">Pre-filled &middot; edit to override for this session</span></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">DSMC Meeting Date</label>
+                <input type="date" id="cover-meeting-date" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+                <div style="font-size:11px;color:var(--text-3);margin-top:3px;" id="cover-date-hint"></div>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">DSMC Chair</label>
+                <input type="text" id="cover-chair" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">Investigational Agent Name</label>
+                <input type="text" id="cover-agent" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">Supplier</label>
+                <input type="text" id="cover-supplier" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">KCI Study #(s)</label>
+                <input type="text" id="cover-study-num" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">Principal Investigator</label>
+                <input type="text" id="cover-pi" class="input-sm" style="width:100%;" oninput="refreshCoverPreview()">
+              </div>
+              <button class="btn btn-sm" onclick="saveStudyMetaOverride()" style="margin-top:4px;align-self:flex-start;">Save as default for this study</button>
+            </div>
+          </div>
+
+          <!-- Right: AERs + ICF decision + preview -->
+          <div class="card">
+            <div class="card-header"><h3>Review Summary</h3><span style="font-size:11px;color:var(--text-3);">Auto-filled from session &middot; editable</span></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">AER #s Reviewed</label>
+                <textarea id="cover-aers" class="input-sm" style="width:100%;min-height:90px;resize:vertical;font-size:11px;" oninput="refreshCoverPreview()"></textarea>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px;">ICF Updates Recommended?</label>
+                <div style="display:flex;gap:12px;">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;"><input type="radio" name="cover-icf-update" value="Yes" id="cover-icf-yes" onchange="refreshCoverPreview()"> Yes</label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;"><input type="radio" name="cover-icf-update" value="No" id="cover-icf-no" checked onchange="refreshCoverPreview()"> No</label>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px;">DSMC Comments</label>
+                <input type="text" id="cover-comments" class="input-sm" style="width:100%;" placeholder="None" oninput="refreshCoverPreview()">
+              </div>
+              <hr class="divider">
+              <button class="btn btn-primary" style="width:100%;" onclick="generateCoverPage()">&#x2B07; Download Cover Page (.docx)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full-width preview -->
+        <div class="card" style="max-width:900px;margin-top:16px;">
+          <div class="card-header"><h3>Preview</h3></div>
+          <div class="card-body">
+            <div id="cover-preview" style="font-size:12px;color:var(--text);line-height:1.8;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Processing Overlay -->
+<div class="processing-overlay" id="processing-overlay">
+  <div class="processing-card">
+    <div class="spinner"></div>
+    <h3 id="proc-title">Analyzing Reports</h3>
+    <p id="proc-msg">Extracting data from IND safety reports...</p>
+    <div class="progress-bar"><div class="progress-fill" id="proc-progress" style="width:0%"></div></div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:8px;" id="proc-step"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+// Built-in study metadata from cover page samples
+const STUDY_META = {
+  'Durvalumab':        { agent: 'Durvalumab',         supplier: 'AstraZeneca',  studyNum: '2022-109',  pi: 'Hirva Mamdani, MD',       chair: 'Lois Ayash, MD' },
+  'Daratumumab':       { agent: 'Daratumumab',         supplier: 'J&J',          studyNum: '2022-082',  pi: 'Jeffrey Zonder, MD',      chair: 'Lois Ayash, MD' },
+  'Iberdomide':        { agent: 'Iberdomide',           supplier: 'BMS',          studyNum: '2022-082',  pi: 'Jeffrey Zonder, MD',      chair: 'Lois Ayash, MD' },
+  'ONC-201':           { agent: 'ONC-201',              supplier: 'Chimerix',     studyNum: '2018-126',  pi: 'Ira Winer, MD, PhD',      chair: 'Lois Ayash, MD' },
+  'Polatuzumab':       { agent: 'Polatuzumab Vedotin', supplier: 'Roche',        studyNum: '2019-135',  pi: 'Dipenkumar Modi, MD',     chair: 'Lois Ayash, MD' },
+  'Selinexor':         { agent: 'Selinexor',            supplier: 'Karyopharm',   studyNum: '2016-125',  pi: 'Dipenkumar Modi, MD',     chair: 'Lois Ayash, MD' },
+};
+
+function getNextDSMCDate(fromDate) {
+  // 3rd Thursday of the current or next month
+  const base = fromDate ? new Date(fromDate) : new Date();
+  function thirdThursday(year, month) {
+    let count = 0;
+    for (let d = 1; d <= 31; d++) {
+      const dt = new Date(year, month, d);
+      if (dt.getMonth() !== month) break;
+      if (dt.getDay() === 4) { count++; if (count === 3) return dt; }
+    }
+  }
+  const now = base;
+  let candidate = thirdThursday(now.getFullYear(), now.getMonth());
+  // If we've already passed this month's 3rd Thursday, go to next month
+  if (!candidate || candidate <= now) {
+    const nm = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+    const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+    candidate = thirdThursday(ny, nm);
+  }
+  return candidate;
+}
+
+function nextDSMCDateISO() {
+  const d = getNextDSMCDate();
+  return d.toISOString().slice(0, 10);
+}
+
+const state = {
+  activeStudy: '',
+  studies: Object.keys(STUDY_META),
+  sessionRows: [],
+  historicalRows: [],
+  icfStore: {},
+  ctepLibrary: [],
+  ctepLoaded: false,
+  trackerLoaded: false,
+  pdfQueue: [],
+  studyMeta: {},      // user overrides keyed by study name
+  trackerStore: {},   // { studyName: { name, rows[] } } — persisted
+};
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+(function init() {
+  // Restore from localStorage
+  try {
+    const saved = localStorage.getItem('ind_state');
+    if (saved) {
+      const s = JSON.parse(saved);
+      // Merge saved studies with built-ins
+      const extras = (s.studies || []).filter(n => !state.studies.includes(n));
+      state.studies = [...state.studies, ...extras];
+      state.icfStore = s.icfStore || {};
+      state.ctepLibrary = s.ctepLibrary || [];
+      state.ctepLoaded = (state.ctepLibrary.length > 0);
+      state.studyMeta = s.studyMeta || {};
+      state.trackerStore = s.trackerStore || {};
+    }
+  } catch(e) {}
+
+  renderStudyDropdown();
+  renderICFStoredList();
+  renderTrackerStoredList();
+  if (state.ctepLoaded) showFileTag('ctep-file-tag', `CTEP library (${state.ctepLibrary.length} terms)`, 'ctep');
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
+})();
+
+function persist() {
+  try {
+    localStorage.setItem('ind_state', JSON.stringify({
+      studies: state.studies,
+      icfStore: state.icfStore,
+      trackerStore: state.trackerStore,
+      ctepLibrary: state.ctepLibrary,
+      studyMeta: state.studyMeta,
+    }));
+  } catch(e) { showToast('Storage limit reached — CTEP library may be too large to persist.', 'error'); }
+}
+
+
+
+// ── STUDY MANAGEMENT ───────────────────────────────────────────────────────
+function renderStudyDropdown() {
+  const sel = document.getElementById('study-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Select study —</option>';
+  state.studies.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+
+function addStudy() {
+  const name = document.getElementById('new-study-input').value.trim();
+  if (!name) return;
+  if (state.studies.includes(name)) { showToast('Study already exists.'); return; }
+  state.studies.push(name);
+  persist();
+  renderStudyDropdown();
+  document.getElementById('study-select').value = name;
+  selectStudy(name);
+  document.getElementById('new-study-input').value = '';
+  showToast(`Study "${name}" added.`, 'success');
+}
+
+function selectStudy(name) {
+  state.activeStudy = name;
+  document.getElementById('active-study-badge').textContent = name || 'No study selected';
+  updateICFTagForStudy();
+  loadTrackerForStudy(name);
+  populateCoverFields();
+}
+
+function loadTrackerForStudy(name) {
+  const stored = name && state.trackerStore[name];
+  if (stored) {
+    state.historicalRows = stored.rows;
+    state.trackerLoaded = true;
+    showFileTag('tracker-file-tag', stored.name + ' (cached)', 'tracker');
+  } else {
+    state.historicalRows = [];
+    state.trackerLoaded = false;
+    document.getElementById('tracker-file-tag').innerHTML = '';
+  }
+  renderAggregatePanel();
+  renderReviewTable();
+}
+
+function getStudyMeta(name) {
+  // User overrides take priority, then built-in STUDY_META, then blanks
+  const override = state.studyMeta[name] || {};
+  const builtin = STUDY_META[name] || {};
+  return {
+    agent:     override.agent     || builtin.agent     || name,
+    supplier:  override.supplier  || builtin.supplier  || '',
+    studyNum:  override.studyNum  || builtin.studyNum  || '',
+    pi:        override.pi        || builtin.pi        || '',
+    chair:     override.chair     || builtin.chair     || 'Lois Ayash, MD',
+  };
+}
+
+function populateCoverFields() {
+  const meta = getStudyMeta(state.activeStudy);
+  const nextDate = nextDSMCDateISO();
+
+  document.getElementById('cover-meeting-date').value = nextDate;
+  document.getElementById('cover-chair').value = meta.chair;
+  document.getElementById('cover-agent').value = meta.agent;
+  document.getElementById('cover-supplier').value = meta.supplier;
+  document.getElementById('cover-study-num').value = meta.studyNum;
+  document.getElementById('cover-pi').value = meta.pi;
+
+  // Format the date nicely for the hint
+  const d = getNextDSMCDate();
+  const hint = d ? 'Next: ' + d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }) : '';
+  const hintEl = document.getElementById('cover-date-hint');
+  if (hintEl) hintEl.textContent = hint;
+
+  // Auto-fill AERs from session
+  const aerStr = buildAERString();
+  if (aerStr) document.getElementById('cover-aers').value = aerStr;
+
+  // Auto-detect ICF recommendation
+  const icfAuto = autoDetectICFUpdate();
+  if (icfAuto === 'Yes') document.getElementById('cover-icf-yes').checked = true;
+  else document.getElementById('cover-icf-no').checked = true;
+
+  refreshCoverPreview();
+}
+
+function saveStudyMetaOverride() {
+  if (!state.activeStudy) return;
+  state.studyMeta[state.activeStudy] = {
+    agent:    document.getElementById('cover-agent').value.trim(),
+    supplier: document.getElementById('cover-supplier').value.trim(),
+    studyNum: document.getElementById('cover-study-num').value.trim(),
+    pi:       document.getElementById('cover-pi').value.trim(),
+    chair:    document.getElementById('cover-chair').value.trim(),
+  };
+  persist();
+  showToast('Saved as default for ' + state.activeStudy, 'success');
+}
+
+// ── FILE UPLOAD HELPERS ────────────────────────────────────────────────────
+function handleDrag(e, zoneId) { e.preventDefault(); document.getElementById(zoneId).classList.add('drag-over'); }
+function clearDrag(zoneId) { document.getElementById(zoneId).classList.remove('drag-over'); }
+function handleDrop(e, type) {
+  e.preventDefault();
+  const files = e.dataTransfer.files;
+  if (!files.length) return;
+  if (type === 'tracker') handleTrackerUpload({ target: { files } });
+  else if (type === 'icf') handleICFUpload({ target: { files } });
+  else if (type === 'ctep') handleCTEPUpload({ target: { files } });
+  else if (type === 'pdf') handlePDFUpload({ target: { files } });
+  clearDrag(type + '-zone');
+}
+
+function showFileTag(containerId, name, type) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = `<div class="file-tag"><span style="font-size:13px;">✅</span><span class="fname">${name}</span><span class="remove" onclick="removeFile('${type}')">×</span></div>`;
+}
+
+function removeFile(type) {
+  if (type === 'tracker' && state.activeStudy) { delete state.trackerStore[state.activeStudy]; state.historicalRows = []; state.trackerLoaded = false; persist(); document.getElementById('tracker-file-tag').innerHTML = ''; renderTrackerStoredList(); renderAggregatePanel(); }
+  if (type === 'icf' && state.activeStudy) { delete state.icfStore[state.activeStudy]; persist(); document.getElementById('icf-file-tag').innerHTML = ''; renderICFStoredList(); }
+  if (type === 'ctep') { state.ctepLibrary = []; state.ctepLoaded = false; persist(); document.getElementById('ctep-file-tag').innerHTML = ''; }
+}
+
+// ── TRACKER UPLOAD ─────────────────────────────────────────────────────────
+function handleTrackerUpload(e) {
+  const file = e.target.files[0]; if (!file) return;
+  if (!state.activeStudy) { showToast('Select a study before uploading a tracker.', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'binary', cellDates: true });
+      // Prefer 'Safety Report Details' sheet; fall back to first sheet
+      const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('safety report')) || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+      // Strip _x000D_ artifacts from header keys
+      const data = rawData.map(row => {
+        const clean = {};
+        Object.entries(row).forEach(([k, v]) => { clean[k.replace(/_x000D_/g,'').trim()] = v; });
+        return clean;
+      });
+      const rows = data.map(normalizeTrackerRow).filter(r => r.aer || r.preferredTerm);
+      // Save parsed rows keyed by study — persists across sessions
+      state.trackerStore[state.activeStudy] = { name: file.name, rows };
+      state.historicalRows = rows;
+      state.trackerLoaded = true;
+      persist();
+      showFileTag('tracker-file-tag', file.name, 'tracker');
+      renderTrackerStoredList();
+      renderAggregatePanel();
+      renderReviewTable();
+      showToast(`Tracker saved for "${state.activeStudy}": ${rows.length} rows.`, 'success');
+    } catch(err) { showToast('Could not parse tracker: ' + err.message, 'error'); console.error(err); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function normalizeTrackerRow(row) {
+  // Strip _x000D_ carriage-return artifacts and trim
+  function clean(v) {
+    if (v == null) return '';
+    return String(v).replace(/_x000D_/g, '').replace(/\r/g, '').trim();
+  }
+  // Case-insensitive fuzzy key lookup — also strips _x000D_ from actual keys
+  function g(r, ...keys) {
+    const rowKeys = Object.keys(r);
+    for (const k of keys) {
+      const kl = k.toLowerCase();
+      const match = rowKeys.find(rk => rk.replace(/_x000D_/g,'').trim().toLowerCase() === kl);
+      const val = match !== undefined ? r[match] : r[k];
+      if (val !== undefined && val !== null && val !== '') return clean(val);
+    }
+    return '';
+  }
+  // Y/N and Yes/No both accepted
+  function normalizeYN(v) {
+    const s = clean(v).toLowerCase();
+    if (s === 'yes' || s === 'y') return 'Yes';
+    if (s === 'no' || s === 'n') return 'No';
+    if (s === 'nr' || s === 'n/a') return s.toUpperCase();
+    return clean(v);
+  }
+  // Dates arrive as ISO strings from XLSX raw:false
+  function fmtDate(v) {
+    if (!v) return '';
+    const s = clean(v);
+    if (!s) return '';
+    // Try parsing as date
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+  return {
+    aer:               clean(g(row, 'AER #', 'AER#', 'AER')),
+    reportDate:        fmtDate(g(row, 'Report Date', 'Report date')),
+    reportType:        clean(g(row, 'Report Type', 'Report type')),
+    verbatim:          clean(g(row, 'Verbatim Event Term', 'Verbatim Event term', 'Verbatim')),
+    preferredTerm:     clean(g(row, 'Preferred Event Term', 'Preferred Term', 'Preferred event term', 'PT')),
+    seriousness:       clean(g(row, 'Seriousness Criteria', 'Seriousness criteria', 'Seriousness')),
+    unexpected:        normalizeYN(g(row, 'Unexpected', 'Unexpected?')),
+    reporterCausality: normalizeYN(g(row, 'Investigator/ Reporter Causality', 'Investigator/Reporter Causality', 'Reporter Causality', 'reporter_causality')),
+    companyCausality:  normalizeYN(g(row, 'Company Causality', 'company_causality')),
+    dsmcDate:          fmtDate(g(row, 'Date Reviewed by DSMC', 'DSMC Review Date')),
+    icfTerms:          clean(g(row, 'ICF Terms', 'icf_terms')),
+    localChange:       clean(g(row, 'Local Change Required per DSMC', 'Local Change Required?', 'Local Change Required')),
+    source: 'historical',
+  };
+}
+
+// ── ICF UPLOAD ─────────────────────────────────────────────────────────────
+function handleICFUpload(e) {
+  const file = e.target.files[0]; if (!file) return;
+  if (!state.activeStudy) { showToast('Select a study before uploading an ICF.', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const b64 = ev.target.result.split(',')[1];
+    state.icfStore[state.activeStudy] = { name: file.name, b64 };
+    persist();
+    updateICFTagForStudy();
+    renderICFStoredList();
+    showToast(`ICF stored for "${state.activeStudy}".`, 'success');
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateICFTagForStudy() {
+  const stored = state.activeStudy && state.icfStore[state.activeStudy];
+  if (stored) showFileTag('icf-file-tag', stored.name, 'icf');
+  else document.getElementById('icf-file-tag').innerHTML = '';
+}
+
+function renderICFStoredList() {
+  const el = document.getElementById('icf-stored-list');
+  const keys = Object.keys(state.icfStore);
+  if (!keys.length) { el.innerHTML = ''; return; }
+  el.innerHTML = keys.map(k => `
+    <div class="icf-stored-item">
+      <span style="font-size:12px;">📄</span>
+      <span class="study-name">${k}</span>
+      <span class="icf-name">${state.icfStore[k].name}</span>
+    </div>`).join('');
+}
+
+function renderTrackerStoredList() {
+  const el = document.getElementById('tracker-stored-list');
+  if (!el) return;
+  const keys = Object.keys(state.trackerStore);
+  if (!keys.length) { el.innerHTML = ''; return; }
+  el.innerHTML = keys.map(k => `
+    <div class="icf-stored-item">
+      <span style="font-size:12px;">📊</span>
+      <span class="study-name">${k}</span>
+      <span class="icf-name">${state.trackerStore[k].rows.length} rows</span>
+    </div>`).join('');
+}
+
+// ── CTEP UPLOAD ────────────────────────────────────────────────────────────
+function handleCTEPUpload(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      // Accept any two-ish column structure: try to find PT and lay term columns
+      state.ctepLibrary = data.map(row => {
+        const keys = Object.keys(row);
+        return { ptTerm: String(row[keys[0]] || ''), layTerm: String(row[keys[1]] || row[keys[2]] || '') };
+      }).filter(r => r.ptTerm);
+      state.ctepLoaded = true;
+      persist();
+      showFileTag('ctep-file-tag', `${file.name} (${state.ctepLibrary.length} terms)`, 'ctep');
+      showToast(`CTEP library loaded: ${state.ctepLibrary.length} terms.`, 'success');
+    } catch(err) { showToast('Could not parse CTEP file.', 'error'); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function lookupCTEP(pt) {
+  if (!state.ctepLoaded || !pt) return '';
+  const ptLower = pt.toLowerCase().trim();
+  const match = state.ctepLibrary.find(r => r.ptTerm.toLowerCase().trim() === ptLower);
+  if (match) return match.layTerm;
+  // Partial match
+  const partial = state.ctepLibrary.find(r => ptLower.includes(r.ptTerm.toLowerCase().trim()) || r.ptTerm.toLowerCase().includes(ptLower));
+  return partial ? partial.layTerm : '';
+}
+
+// ── PDF QUEUE ──────────────────────────────────────────────────────────────
+function handlePDFUpload(e) {
+  const files = Array.from(e.target.files);
+  files.forEach(f => { if (!state.pdfQueue.find(q => q.name === f.name)) state.pdfQueue.push(f); });
+  renderPDFQueue();
+}
+
+function renderPDFQueue() {
+  const el = document.getElementById('pdf-queue');
+  if (!state.pdfQueue.length) { el.innerHTML = ''; return; }
+  el.innerHTML = state.pdfQueue.map((f, i) => `
+    <div class="file-tag">
+      <span style="font-size:11px;">📄</span>
+      <span class="fname">${f.name}</span>
+      <span class="remove" onclick="removePDF(${i})">×</span>
+    </div>`).join('');
+}
+
+function removePDF(i) { state.pdfQueue.splice(i, 1); renderPDFQueue(); }
+
+// ── PDF PROCESSING ─────────────────────────────────────────────────────────
+async function processReports() {
+  if (!state.pdfQueue.length) { showToast('Upload at least one report PDF.', 'error'); return; }
+  if (!state.activeStudy) { showToast('Select an active study.', 'error'); return; }
+
+  showOverlay(true, 'Analyzing Reports', `Processing ${state.pdfQueue.length} report(s)...`);
+  setProgress(5);
+
+  const icfData = state.icfStore[state.activeStudy];
+  const ctepSummary = state.ctepLoaded
+    ? `CTEP/CTCAE IC term library has ${state.ctepLibrary.length} entries. Sample: ${state.ctepLibrary.slice(0,5).map(r=>r.ptTerm+' → '+r.layTerm).join('; ')}`
+    : 'No CTEP library uploaded.';
+
+  const newRows = [];
+  for (let i = 0; i < state.pdfQueue.length; i++) {
+    const file = state.pdfQueue[i];
+    setStep(`Processing ${i+1}/${state.pdfQueue.length}: ${file.name}`);
+    setProgress(10 + (i / state.pdfQueue.length) * 75);
+
+    try {
+      const b64 = await fileToBase64(file);
+      const rows = await extractFromPDF(b64, icfData, ctepSummary);
+      // rows is always an array — count prior occurrences per row
+      rows.forEach(row => {
+        row.priorCount = countPriorOccurrences(row.preferredTerm, newRows);
+        newRows.push(row);
+      });
+    } catch(err) {
+      console.error('Extraction error:', err);
+      showToast(`Failed: ${err.message}`, 'error');
+    }
+  }
+
+  setProgress(95);
+  setStep('Finalizing...');
+
+  state.sessionRows.push(...newRows);
+  state.pdfQueue = [];
+  renderPDFQueue();
+
+  showOverlay(false);
+  updateCounts();
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
+  switchPanel('review');
+  showToast(`${newRows.length} report(s) extracted successfully.`, 'success');
+}
+
+async function extractFromPDF(b64, icfData, ctepSummary) {
+  const icfInstruction = icfData
+    ? `The current Informed Consent Form (ICF) for this study is also attached. For each AE term found, check if the ICF contains a matching lay term for that event. If a match is found, record the exact lay term phrase from the ICF. If no match, record "N/A" and reference the CTEP library for a recommended term.`
+    : `No ICF has been uploaded for this study. Mark ICF Terms as "N/A — ICF not uploaded".`;
+
+  const systemPrompt = `You are a clinical trials safety specialist extracting structured data from FDA IND safety reports (MedWatch 3500A, CIOMS, or narrative formats).
+
+Extract all fields with precision. Return ONLY valid JSON — no markdown, no preamble.
+
+${ctepSummary}
+
+${icfInstruction}
+
+Return this exact JSON structure (one entry per adverse event in the report):
+{
+  "aer": "AER or report number",
+  "reportDate": "date as written",
+  "reportType": "Initial or FU1/FU2/etc",
+  "sponsor": "sponsor name if present",
+  "verbatim": "verbatim event term as written in report",
+  "preferredTerm": "MedDRA preferred term or best medical term",
+  "seriousness": "Fatal | Life-Threatening | IME | Hospitalization | Other (as listed)",
+  "unexpected": "Yes or No",
+  "reporterCausality": "Related | Possibly Related | Unlikely Related | Unrelated | Unknown",
+  "companyCausality": "Related | Possibly Related | Unlikely Related | Unrelated | Unknown",
+  "icfTerms": "matched lay term from ICF, or N/A, or N/A (recommended: [CTEP term])",
+  "localChange": "No if ICF match found, otherwise leave blank for DSMC decision"
+}
+
+If there are multiple AEs in one report, return an array of these objects. If only one AE, still return an array with one element.`;
+
+  const messages = [{ role: 'user', content: [] }];
+
+  // Attach the PDF
+  messages[0].content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
+
+  // Attach ICF if available
+  if (icfData) {
+    messages[0].content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: icfData.b64 } });
+  }
+
+  messages[0].content.push({ type: 'text', text: 'Extract all adverse event data from this IND safety report per the instructions.' });
+
+  const resp = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, system: systemPrompt, messages })
+  });
+
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    console.error('API error:', JSON.stringify(errBody));
+    throw new Error(errBody.error?.message || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  console.log('API response:', JSON.stringify(data).slice(0, 500));
+  const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  console.log('Extracted text:', text.slice(0, 300));
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch(e) {
+    console.error('JSON parse error:', e.message, '\nText was:', text.slice(0, 500));
+    throw new Error('JSON parse failed: ' + e.message);
+  }
+  if (!Array.isArray(parsed)) parsed = [parsed];
+
+  return parsed.map(r => ({
+    aer: r.aer || '',
+    reportDate: r.reportDate || '',
+    reportType: r.reportType || '',
+    verbatim: r.verbatim || '',
+    preferredTerm: r.preferredTerm || '',
+    seriousness: r.seriousness || '',
+    unexpected: r.unexpected || '',
+    reporterCausality: r.reporterCausality || '',
+    companyCausality: r.companyCausality || '',
+    dsmcDate: '',
+    icfTerms: r.icfTerms || '',
+    localChange: r.localChange || '',
+    source: 'session',
+    study: state.activeStudy,
+  }));
+}
+
+// ── COUNTS ──────────────────────────────────────────────────────────────────
+function countPriorOccurrences(pt, alreadyExtracted) {
+  if (!pt) return 0;
+  const ptLower = pt.toLowerCase().trim();
+  const histCount = state.historicalRows.filter(r => r.preferredTerm.toLowerCase().trim() === ptLower).length;
+  const sessionCount = alreadyExtracted.flat().filter(r => r.preferredTerm.toLowerCase().trim() === ptLower).length;
+  return histCount + sessionCount;
+}
+
+// ── RENDER: REVIEW TABLE ───────────────────────────────────────────────────
+function renderReviewTable() {
+  const tbody = document.getElementById('review-tbody');
+  const rows = state.sessionRows.flat();
+  const filterUnexpected = document.getElementById('filter-unexpected').value;
+  const filterType = document.getElementById('filter-type').value;
+
+  let filtered = rows.filter(r => {
+    if (filterUnexpected && r.unexpected !== filterUnexpected) return false;
+    if (filterType && !r.reportType.toLowerCase().includes(filterType.toLowerCase())) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-3);">${rows.length ? 'No rows match current filters.' : 'Upload and process IND safety reports to populate this table.'}</td></tr>`;
+    renderReviewStats(rows);
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((r, i) => `
+    <tr class="new-row">
+      <td><strong>${esc(r.aer)}</strong></td>
+      <td style="white-space:nowrap;">${esc(r.reportDate)}</td>
+      <td>${badgeReportType(r.reportType)}</td>
+      <td style="max-width:140px;word-break:break-word;">${esc(r.verbatim)}</td>
+      <td style="max-width:140px;word-break:break-word;"><strong>${esc(r.preferredTerm)}</strong></td>
+      <td>${badgeSeriousness(r.seriousness)}</td>
+      <td>${badgeUnexpected(r.unexpected)}</td>
+      <td>${esc(r.reporterCausality)}</td>
+      <td>${esc(r.companyCausality)}</td>
+      <td class="editable-cell" onclick="editCell(this, ${i}, 'dsmcDate')">${esc(r.dsmcDate) || '<span style="color:var(--text-3)">—</span>'}</td>
+      <td style="max-width:160px;">${renderICFTermsCell(r.icfTerms)}</td>
+      <td class="editable-cell" onclick="editLocalChange(this, ${i})">${renderLocalChange(r.localChange, i)}</td>
+      <td style="text-align:center;">${priorBadge(r.priorCount)}</td>
+    </tr>`).join('');
+
+  renderReviewStats(rows);
+}
+
+function renderReviewStats(rows) {
+  const total = rows.length;
+  const unexpected = rows.filter(r => r.unexpected === 'Yes').length;
+  const serious = rows.filter(r => r.seriousness && r.seriousness !== 'Other').length;
+  const icfGaps = rows.filter(r => r.icfTerms && r.icfTerms.startsWith('N/A')).length;
+
+  document.getElementById('review-stats').innerHTML = `
+    <div class="stat-card"><div class="label">Reports (session)</div><div class="value">${total}</div></div>
+    <div class="stat-card"><div class="label">Unexpected</div><div class="value red">${unexpected}</div></div>
+    <div class="stat-card"><div class="label">Serious</div><div class="value amber">${serious}</div></div>
+    <div class="stat-card"><div class="label">ICF Gaps</div><div class="value">${icfGaps}</div><div class="sublabel">terms missing from ICF</div></div>
+    <div class="stat-card"><div class="label">Historical</div><div class="value">${state.historicalRows.length}</div><div class="sublabel">rows in tracker</div></div>`;
+}
+
+function renderICFTermsCell(val) {
+  if (!val) return '<span style="color:var(--text-3)">—</span>';
+  if (val.startsWith('N/A')) return `<span class="icf-status-missing">${esc(val)}</span>`;
+  return `<span class="icf-status-match">✓ ${esc(val)}</span>`;
+}
+
+function renderLocalChange(val, idx) {
+  if (val === 'No') return `<span class="badge badge-green">No</span>`;
+  if (val === 'Yes') return `<span class="badge badge-red">Yes</span>`;
+  return `<select class="select-sm" style="font-size:11px;" onchange="setLocalChange(${idx}, this.value)" onclick="event.stopPropagation()">
+    <option value="">— DSMC decides —</option>
+    <option value="Yes">Yes</option>
+    <option value="No">No</option>
+  </select>`;
+}
+
+function setLocalChange(idx, val) {
+  const rows = state.sessionRows.flat();
+  if (rows[idx]) { rows[idx].localChange = val; renderReviewTable(); renderICFPanel(); }
+}
+
+function editCell(td, idx, field) {
+  const rows = state.sessionRows.flat();
+  const cur = rows[idx] ? rows[idx][field] : '';
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.value = cur;
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.onblur = () => { if (rows[idx]) { rows[idx][field] = input.value; renderReviewTable(); } };
+  input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
+}
+
+function editLocalChange(td, idx) { /* handled by select */ }
+
+function priorBadge(count) {
+  if (count === undefined || count === null) return '<span style="color:var(--text-3)">—</span>';
+  if (count === 0) return `<span class="badge badge-green">First</span>`;
+  if (count < 3) return `<span class="badge badge-amber">${count}×</span>`;
+  return `<span class="badge badge-red">${count}×</span>`;
+}
+
+function badgeReportType(t) {
+  if (!t) return '';
+  if (t.toLowerCase().includes('initial')) return `<span class="badge badge-blue">${esc(t)}</span>`;
+  return `<span class="badge badge-purple">${esc(t)}</span>`;
+}
+
+function badgeSeriousness(s) {
+  if (!s) return '';
+  if (s.toLowerCase() === 'fatal') return `<span class="badge badge-red">${esc(s)}</span>`;
+  if (s.toLowerCase().includes('threat') || s.toLowerCase().includes('ime')) return `<span class="badge badge-amber">${esc(s)}</span>`;
+  return `<span class="badge badge-gray">${esc(s)}</span>`;
+}
+
+function badgeUnexpected(u) {
+  if (u === 'Yes') return `<span class="badge badge-red">Unexpected</span>`;
+  if (u === 'No') return `<span class="badge badge-green">Expected</span>`;
+  return `<span style="color:var(--text-3)">${esc(u)}</span>`;
+}
+
+// ── RENDER: AGGREGATE ───────────────────────────────────────────────────────
+function renderAggregatePanel() {
+  const allRows = [...state.historicalRows, ...state.sessionRows.flat()];
+  const filterCausality = document.getElementById('agg-filter-causality').value;
+  const filterUnexpected = document.getElementById('agg-filter-unexpected').value;
+
+  let filtered = allRows.filter(r => {
+    if (filterCausality && r.reporterCausality !== filterCausality && r.companyCausality !== filterCausality) return false;
+    if (filterUnexpected && r.unexpected !== filterUnexpected) return false;
+    return true;
+  });
+
+  // Aggregate by PT
+  const counts = {};
+  filtered.forEach(r => {
+    const pt = r.preferredTerm.trim();
+    if (!pt) return;
+    if (!counts[pt]) counts[pt] = { total: 0, historical: 0, session: 0, unexpected: 0 };
+    counts[pt].total++;
+    if (r.source === 'historical') counts[pt].historical++;
+    else counts[pt].session++;
+    if (r.unexpected === 'Yes') counts[pt].unexpected++;
+  });
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1].total - a[1].total);
+  const maxCount = sorted.length ? sorted[0][1].total : 1;
+
+  // Stats
+  const uniquePTs = sorted.length;
+  const totalAEs = filtered.length;
+  const unexpectedCount = filtered.filter(r => r.unexpected === 'Yes').length;
+
+  document.getElementById('agg-stats').innerHTML = `
+    <div class="stat-card"><div class="label">Total AE Reports</div><div class="value">${totalAEs}</div><div class="sublabel">historical + session</div></div>
+    <div class="stat-card"><div class="label">Unique PT Terms</div><div class="value">${uniquePTs}</div></div>
+    <div class="stat-card"><div class="label">Unexpected</div><div class="value red">${unexpectedCount}</div></div>
+    <div class="stat-card"><div class="label">Historical rows</div><div class="value">${state.historicalRows.length}</div></div>`;
+
+  document.getElementById('count-aggregate').textContent = uniquePTs;
+
+  if (!sorted.length) {
+    document.getElementById('agg-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">No data available. Upload a tracker or process reports.</td></tr>`;
+    return;
+  }
+
+  document.getElementById('agg-tbody').innerHTML = sorted.map(([pt, c]) => `
+    <tr>
+      <td><strong>${esc(pt)}</strong></td>
+      <td style="text-align:center;font-weight:600;">${c.total}</td>
+      <td style="text-align:center;color:var(--text-2);">${c.historical}</td>
+      <td style="text-align:center;color:var(--kci-blue);font-weight:500;">${c.session}</td>
+      <td style="text-align:center;">${c.unexpected > 0 ? `<span class="badge badge-red">${c.unexpected}</span>` : '—'}</td>
+      <td style="min-width:120px;">
+        <div class="freq-bar-wrap">
+          <div class="freq-bar" style="width:${Math.round((c.total/maxCount)*100)}px;"></div>
+          <span style="font-size:11px;color:var(--text-3);">${Math.round((c.total/totalAEs)*100)}%</span>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+// ── RENDER: ICF PANEL ───────────────────────────────────────────────────────
+function renderICFPanel() {
+  const rows = state.sessionRows.flat();
+  const filter = document.getElementById('icf-filter').value;
+
+  let filtered = rows.filter(r => {
+    if (filter === 'missing') return r.icfTerms && r.icfTerms.startsWith('N/A');
+    if (filter === 'matched') return r.icfTerms && !r.icfTerms.startsWith('N/A');
+    return true;
+  });
+
+  const matched = rows.filter(r => r.icfTerms && !r.icfTerms.startsWith('N/A') && r.icfTerms !== '').length;
+  const missing = rows.filter(r => r.icfTerms && r.icfTerms.startsWith('N/A')).length;
+  const changeReq = rows.filter(r => r.localChange === 'Yes').length;
+
+  document.getElementById('icf-stats').innerHTML = `
+    <div class="stat-card"><div class="label">Terms checked</div><div class="value">${rows.length}</div></div>
+    <div class="stat-card"><div class="label">ICF matches</div><div class="value green">${matched}</div></div>
+    <div class="stat-card"><div class="label">Missing from ICF</div><div class="value red">${missing}</div></div>
+    <div class="stat-card"><div class="label">Local change required</div><div class="value amber">${changeReq}</div></div>`;
+
+  document.getElementById('count-icf').textContent = missing;
+
+  if (!filtered.length) {
+    document.getElementById('icf-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-3);">${rows.length ? 'No rows match filter.' : 'Process reports with an ICF uploaded to see gap analysis.'}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('icf-tbody').innerHTML = filtered.map((r, i) => {
+    const isMissing = r.icfTerms && r.icfTerms.startsWith('N/A');
+    const ctepTerm = lookupCTEP(r.preferredTerm);
+    const recommended = ctepTerm || (isMissing ? 'Not found in CTEP library' : '');
+    const origIdx = state.sessionRows.flat().indexOf(r);
+    return `<tr>
+      <td><strong>${esc(r.aer)}</strong></td>
+      <td>${esc(r.preferredTerm)}</td>
+      <td>${isMissing ? '<span class="badge badge-red">Missing</span>' : '<span class="badge badge-green">Matched</span>'}</td>
+      <td>${isMissing ? '<span style="color:var(--text-3)">—</span>' : `<span class="icf-status-match">${esc(r.icfTerms)}</span>`}</td>
+      <td style="color:var(--kci-blue);">${isMissing ? esc(recommended) : '—'}</td>
+      <td>
+        ${r.localChange === 'Yes' ? '<span class="badge badge-red">Yes</span>' :
+          r.localChange === 'No' ? '<span class="badge badge-green">No</span>' :
+          isMissing ? `<select class="select-sm" style="font-size:11px;" onchange="setLocalChange(${origIdx}, this.value)"><option value="">DSMC decides</option><option value="Yes">Yes</option><option value="No">No</option></select>` :
+          '<span class="badge badge-green">No</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── EXPORT TO EXCEL ─────────────────────────────────────────────────────────
+function exportToExcel() {
+  const rows = state.sessionRows.flat();
+  if (!rows.length) { showToast('No session data to export.', 'error'); return; }
+
+  const data = rows.map(r => ({
+    'AER #': r.aer,
+    'Report Date': r.reportDate,
+    'Report Type': r.reportType,
+    'Verbatim Event Term': r.verbatim,
+    'Preferred Term': r.preferredTerm,
+    'Seriousness criteria': r.seriousness,
+    'Unexpected?': r.unexpected,
+    'Reporter Causality': r.reporterCausality,
+    'Company Causality': r.companyCausality,
+    'Date Reviewed by DSMC': r.dsmcDate,
+    'ICF Terms': r.icfTerms,
+    'Local Change Required?': r.localChange,
+    'Prior Occurrences': r.priorCount !== undefined ? r.priorCount : '',
+    'Study': r.study || state.activeStudy,
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'IND Safety Reports');
+  const fname = `IND_Safety_${state.activeStudy || 'export'}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  showToast('Exported to Excel.', 'success');
+}
+
+// ── PANEL NAVIGATION ────────────────────────────────────────────────────────
+function switchPanel(name) {
+  ['review', 'aggregate', 'icf', 'cover'].forEach(p => {
+    document.getElementById('panel-' + p).classList.toggle('active', p === name);
+    document.getElementById('tab-' + p).classList.toggle('active', p === name);
+  });
+  if (name === 'aggregate') renderAggregatePanel();
+  if (name === 'icf') renderICFPanel();
+  if (name === 'cover') refreshCoverPreview();
+}
+
+function updateCounts() {
+  document.getElementById('count-review').textContent = state.sessionRows.flat().length;
+}
+
+// ── CLEAR SESSION ───────────────────────────────────────────────────────────
+function clearSession() {
+  if (!confirm('Clear session report data? Stored trackers, ICFs, and CTEP library will remain.')) return;
+  state.sessionRows = [];
+  state.pdfQueue = [];
+  document.getElementById('pdf-queue').innerHTML = '';
+  // Reload historical rows for current study from store
+  if (state.activeStudy && state.trackerStore[state.activeStudy]) {
+    state.historicalRows = state.trackerStore[state.activeStudy].rows;
+  }
+  updateCounts();
+  renderReviewTable();
+  renderAggregatePanel();
+  renderICFPanel();
+  showToast('Session cleared.');
+}
+
+// ── UTILITIES ───────────────────────────────────────────────────────────────
+function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('File read error'));
+    r.readAsDataURL(file);
+  });
+}
+
+function showOverlay(show, title='', msg='') {
+  document.getElementById('processing-overlay').style.display = show ? 'flex' : 'none';
+  if (title) document.getElementById('proc-title').textContent = title;
+  if (msg) document.getElementById('proc-msg').textContent = msg;
+  if (!show) { setProgress(0); setStep(''); }
+}
+
+function setProgress(pct) { document.getElementById('proc-progress').style.width = pct + '%'; }
+function setStep(msg) { document.getElementById('proc-step').textContent = msg; }
+
+let toastTimer;
+function showToast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3500);
+}
+
+// ── COVER PAGE ──────────────────────────────────────────────────────────────
+function buildAERString() {
+  const rows = state.sessionRows.flat();
+  if (!rows.length) return '';
+  const aerMap = {};
+  rows.forEach(r => {
+    if (!r.aer) return;
+    if (!aerMap[r.aer]) aerMap[r.aer] = new Set();
+    if (r.reportType) aerMap[r.aer].add(r.reportType);
+  });
+  return Object.entries(aerMap).map(([aer, types]) => {
+    const t = [...types].join(', ');
+    return t ? aer + ' (' + t + ')' : aer;
+  }).join(', ');
+}
+
+function autoDetectICFUpdate() {
+  const rows = state.sessionRows.flat();
+  return rows.some(r => r.localChange === 'Yes') ? 'Yes' : 'No';
+}
+
+function getCoverData() {
+  return {
+    meetingDate: document.getElementById('cover-meeting-date').value || '',
+    chair:       document.getElementById('cover-chair').value.trim() || '',
+    agent:       document.getElementById('cover-agent').value.trim() || state.activeStudy || '',
+    supplier:    document.getElementById('cover-supplier').value.trim() || '',
+    studyNum:    document.getElementById('cover-study-num').value.trim() || '',
+    pi:          document.getElementById('cover-pi').value.trim() || '',
+    aers:        document.getElementById('cover-aers').value.trim() || '',
+    icfUpdate:   document.querySelector('input[name="cover-icf-update"]:checked')?.value || 'No',
+    comments:    document.getElementById('cover-comments').value.trim() || 'None',
+  };
+}
+
+function formatDisplayDate(val) {
+  if (!val) return '_______________';
+  const d = new Date(val + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function refreshCoverPreview() {
+  const d = getCoverData();
+  const rows = [
+    ['Date of DSMC Meeting', formatDisplayDate(d.meetingDate)],
+    ['DSMC Chair', d.chair || '_______________'],
+    ['Investigational Agent Name', d.agent || '_______________'],
+    ['Supplier', d.supplier || '_______________'],
+    ['KCI Study #(s)', d.studyNum || '_______________'],
+    ['Principal Investigator Name(s)', d.pi || '_______________'],
+    ['AER #s Reviewed', d.aers || '(none yet — process reports first)'],
+    ['ICF Updates Recommended?', d.icfUpdate],
+    ['DSMC Comments', d.comments || 'None'],
+  ];
+  const el = document.getElementById('cover-preview');
+  if (!el) return;
+  el.innerHTML =
+    '<div style="font-weight:600;font-size:13px;color:var(--kci-navy);text-align:center;margin-bottom:12px;">Data and Safety Monitoring Committee – Safety Report Review Form</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+    rows.map(([label, val]) =>
+      '<tr>' +
+      '<td style="padding:5px 10px;font-weight:600;background:#d6e4f5;border:1px solid #1a5ca8;white-space:nowrap;vertical-align:top;width:220px;">' + label + ':</td>' +
+      '<td style="padding:5px 10px;border:1px solid #1a5ca8;vertical-align:top;' + (label.includes('ICF') && val === 'Yes' ? 'color:#c8102e;font-weight:600;' : '') + '">' + (val || '') + '</td>' +
+      '</tr>'
+    ).join('') + '</table>';
+}
+
+async function generateCoverPage() {
+  const d = getCoverData();
+  if (!d.chair) { showToast('DSMC Chair name is required.', 'error'); return; }
+  showToast('Generating cover page...');
+  if (typeof docx === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/docx@8.5.0/build/index.umd.js';
+    s.onload = () => _buildDocx(d);
+    s.onerror = () => showToast('Could not load docx library.', 'error');
+    document.head.appendChild(s);
+  } else {
+    _buildDocx(d);
+  }
+}
+
+function _buildDocx(d) {
+  try {
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+            AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign } = docx;
+
+    const border = { style: BorderStyle.SINGLE, size: 4, color: '1A5CA8' };
+    const borders = { top: border, bottom: border, left: border, right: border };
+
+    function labelCell(text) {
+      return new TableCell({
+        borders, width: { size: 3000, type: WidthType.DXA },
+        shading: { fill: 'D6E4F5', type: ShadingType.CLEAR },
+        margins: { top: 100, bottom: 100, left: 140, right: 140 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({ children: [new TextRun({ text, bold: true, font: 'Arial', size: 22 })] })],
+      });
+    }
+
+    function valueCell(text, opts={}) {
+      return new TableCell({
+        borders, width: { size: 6360, type: WidthType.DXA },
+        shading: { fill: 'FFFFFF', type: ShadingType.CLEAR },
+        margins: { top: 100, bottom: 100, left: 140, right: 140 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({ children: [new TextRun({ text: text || '', font: 'Arial', size: 22, ...opts })] })],
+      });
+    }
+
+    function row(label, value, valueOpts={}) {
+      return new TableRow({ children: [labelCell(label), valueCell(value, valueOpts)] });
+    }
+
+    const table = new Table({
+      width: { size: 9360, type: WidthType.DXA },
+      columnWidths: [3000, 6360],
+      rows: [
+        row('Date of DSMC Meeting:', formatDisplayDate(d.meetingDate)),
+        row('DSMC Chair:', d.chair),
+        row('Investigational Agent Name:', d.agent),
+        row('Supplier:', d.supplier),
+        row('KCI Study #(s):', d.studyNum),
+        row('Principal Investigator Name(s):', d.pi),
+        row('AER #s Reviewed:', d.aers),
+        row('ICF Updates Recommended?', d.icfUpdate, d.icfUpdate === 'Yes' ? { bold: true, color: 'C8102E' } : {}),
+        row('DSMC Comments:', d.comments),
+      ],
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 360 },
+            children: [new TextRun({ text: 'Data and Safety Monitoring Committee – Safety Report Review Form', bold: true, font: 'Arial', size: 28, color: '0A2240' })],
+          }),
+          table,
+          new Paragraph({
+            spacing: { before: 600, after: 0 },
+            children: [
+              new TextRun({ text: 'DSMC Chair Signature: ___________________________________', font: 'Arial', size: 22 }),
+              new TextRun({ text: '    Date: _______________', font: 'Arial', size: 22 }),
+            ]
+          }),
+        ]
+      }]
+    });
+
+    Packer.toBlob(doc).then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safe = (state.activeStudy || 'DSMC').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dateStr = d.meetingDate ? d.meetingDate.replace(/-/g,'') : new Date().toISOString().slice(0,10).replace(/-/g,'');
+      a.href = url; a.download = 'DSMC_Cover_' + safe + '_' + dateStr + '.docx';
+      a.click(); URL.revokeObjectURL(url);
+      showToast('Cover page downloaded.', 'success');
+    });
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+    console.error(err);
+  }
+}
+
+</script>
+</body>
