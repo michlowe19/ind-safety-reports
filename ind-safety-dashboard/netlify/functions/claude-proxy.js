@@ -1,43 +1,48 @@
+const https = require('https');
+
 exports.handler = async function(event) {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  // Use server-side env var if set, otherwise accept key from client header
   const apiKey = process.env.ANTHROPIC_API_KEY || event.headers['x-client-api-key'];
   if (!apiKey) {
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: { message: 'No API key configured. Set ANTHROPIC_API_KEY in Netlify env vars or enter it in the dashboard.' } }),
+      body: JSON.stringify({ error: { message: 'No API key configured.' } }),
     };
   }
 
-  try {
-    const body = JSON.parse(event.body);
+  const body = event.body;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const data = await new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(body),
+    };
+
+    const req = https.request(options, (res) => {
+      let raw = '';
+      res.on('data', chunk => { raw += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: raw }));
     });
 
-    const data = await response.json();
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
 
-    return {
-      statusCode: response.status,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: { message: err.message } }),
-    };
-  }
+  return {
+    statusCode: data.status,
+    headers: { 'Content-Type': 'application/json' },
+    body: data.body,
+  };
 };
