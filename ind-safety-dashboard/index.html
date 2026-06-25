@@ -1030,7 +1030,7 @@ ${reportText.slice(0, 12000)}`;
 
   const messages = [{ role: 'user', content: userMessage }];
 
-  const resp = await fetch('/api/claude', {
+  const resp = await fetch('/.netlify/functions/claude-proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, system: systemPrompt, messages })
