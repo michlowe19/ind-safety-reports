@@ -166,6 +166,17 @@
   .new-study-form { display: flex; gap: 8px; margin-top: 8px; }
   .new-study-form input { flex: 1; }
 
+  .study-list { display: flex; flex-direction: column; gap: 3px; }
+  .study-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius); cursor: pointer; border: none; background: none; text-align: left; width: 100%; transition: all 0.15s; }
+  .study-item:hover { background: var(--surface2); }
+  .study-item.active { background: var(--kci-light); border-left: 3px solid var(--kci-blue); padding-left: 7px; }
+  .study-item-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+  .study-item.active .study-item-name { color: var(--kci-blue); }
+  .study-item-badges { display: flex; gap: 3px; flex-shrink: 0; }
+  .phase-banner { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .phase-btn { flex: 1; padding: 5px 6px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface2); font-size: 10px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text-2); transition: all 0.15s; white-space: nowrap; }
+  .phase-btn.active { background: var(--kci-navy); color: white; border-color: var(--kci-navy); }
+
   .icf-stored-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
   .icf-stored-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--surface2); border-radius: 6px; font-size: 11px; }
   .icf-stored-item .study-name { flex: 1; font-weight: 500; }
@@ -220,12 +231,22 @@
       <div id="api-key-status" style="font-size:11px;color:var(--text-3);margin-top:5px;"></div>
     </div>
 
-    <!-- Study Selector -->
+    <!-- Phase Selector -->
     <div class="sidebar-section">
-      <div class="sidebar-label">Active Study / Drug</div>
-      <select class="study-selector" id="study-select" onchange="selectStudy(this.value)">
-        <option value="">— Select study —</option>
-      </select>
+      <div class="sidebar-label">Workflow Phase</div>
+      <div class="phase-banner">
+        <button class="phase-btn active" id="phase-admin" onclick="setPhase('admin')">📥 Admin</button>
+        <button class="phase-btn" id="phase-review" onclick="setPhase('review')">🔍 Pre-DSMC</button>
+        <button class="phase-btn" id="phase-meeting" onclick="setPhase('meeting')">📋 Meeting</button>
+        <button class="phase-btn" id="phase-post" onclick="setPhase('post')">📝 Post</button>
+      </div>
+      <div id="phase-hint" style="font-size:11px;color:var(--text-3);line-height:1.4;"></div>
+    </div>
+
+    <!-- Study List -->
+    <div class="sidebar-section">
+      <div class="sidebar-label" style="margin-bottom:8px;">Studies / Drugs</div>
+      <div class="study-list" id="study-list"></div>
       <div class="new-study-form">
         <input type="text" id="new-study-input" class="input-sm" placeholder="Add new study..." style="font-size:11px;">
         <button class="btn btn-sm" onclick="addStudy()">Add</button>
@@ -604,6 +625,7 @@ const state = {
   studyMeta: {},      // user overrides keyed by study name
   trackerStore: {},   // { studyName: { name, rows[] } } — persisted
   sessionStore: {},   // { studyName: rows[] } — extracted rows persisted per study
+  currentPhase: 'admin',
 };
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -630,9 +652,10 @@ const state = {
     document.getElementById('api-key-input').value = '••••••••••••••••';
     document.getElementById('api-key-status').textContent = 'API key loaded.';
   }
-  renderStudyDropdown();
+  renderStudyList();
   renderICFStoredList();
   renderTrackerStoredList();
+  document.getElementById('phase-hint').textContent = PHASE_HINTS['admin'];
   if (state.ctepLoaded) showFileTag('ctep-file-tag', `CTEP library (${state.ctepLibrary.length} terms)`, 'ctep');
   renderReviewTable();
   renderAggregatePanel();
@@ -667,17 +690,55 @@ function saveApiKey() {
 }
 
 // ── STUDY MANAGEMENT ───────────────────────────────────────────────────────
-function renderStudyDropdown() {
-  const sel = document.getElementById('study-select');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— Select study —</option>';
-  state.studies.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s; opt.textContent = s;
-    sel.appendChild(opt);
+const PHASE_HINTS = {
+  admin:   'Upload incoming PDFs for any study. Switch studies freely as reports arrive.',
+  review:  'Review each study\'s reports and assign ICF terms for any SAE gaps before the meeting.',
+  meeting: 'Read-only review during the DSMC meeting. Switch studies to present each drug\'s data.',
+  post:    'Generate and download the DSMC cover page for each study after the meeting.',
+};
+
+function setPhase(phase) {
+  ['admin','review','meeting','post'].forEach(p => {
+    document.getElementById('phase-' + p).classList.toggle('active', p === phase);
   });
-  if (cur) sel.value = cur;
+  document.getElementById('phase-hint').textContent = PHASE_HINTS[phase] || '';
+  state.currentPhase = phase;
+  // In meeting mode auto-switch to review panel; in post mode go to cover
+  if (phase === 'meeting') switchPanel('review');
+  if (phase === 'post') switchPanel('cover');
 }
+
+function getStudyStats(name) {
+  const rows = state.sessionStore[name] || [];
+  const reports = new Set(rows.map(r => r.aer)).size;
+  const icfGaps = rows.filter(r => r.icfTerms && r.icfTerms.startsWith('N/A')).length;
+  const hasTracker = !!state.trackerStore[name];
+  return { reports, icfGaps, hasTracker };
+}
+
+function renderStudyList() {
+  const el = document.getElementById('study-list');
+  if (!el) return;
+  if (!state.studies.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-3);padding:6px 0;">No studies yet — add one below.</div>';
+    return;
+  }
+  el.innerHTML = state.studies.map(name => {
+    const s = getStudyStats(name);
+    const isActive = name === state.activeStudy;
+    const badges = [];
+    if (s.reports) badges.push(`<span class="badge badge-blue" style="font-size:10px;">${s.reports} AER${s.reports !== 1 ? 's' : ''}</span>`);
+    if (s.icfGaps) badges.push(`<span class="badge badge-red" style="font-size:10px;">${s.icfGaps} gap${s.icfGaps !== 1 ? 's' : ''}</span>`);
+    if (s.hasTracker && !s.reports) badges.push(`<span class="badge badge-gray" style="font-size:10px;">tracker</span>`);
+    return `<button class="study-item${isActive ? ' active' : ''}" onclick="selectStudy('${esc(name)}')">
+      <span class="study-item-name">${esc(name)}</span>
+      <div class="study-item-badges">${badges.join('')}</div>
+    </button>`;
+  }).join('');
+}
+
+// Keep renderStudyDropdown as alias for backward compat
+function renderStudyDropdown() { renderStudyList(); }
 
 function addStudy() {
   const name = document.getElementById('new-study-input').value.trim();
@@ -685,8 +746,7 @@ function addStudy() {
   if (state.studies.includes(name)) { showToast('Study already exists.'); return; }
   state.studies.push(name);
   persist();
-  renderStudyDropdown();
-  document.getElementById('study-select').value = name;
+  renderStudyList();
   selectStudy(name);
   document.getElementById('new-study-input').value = '';
   showToast(`Study "${name}" added.`, 'success');
@@ -699,6 +759,7 @@ function selectStudy(name) {
   loadTrackerForStudy(name);
   state.sessionRows = (name && state.sessionStore[name]) ? [...state.sessionStore[name]] : [];
   updateCounts();
+  renderStudyList();
   renderReviewTable();
   renderAggregatePanel();
   renderICFPanel();
@@ -1042,6 +1103,7 @@ async function processReports() {
 
   showOverlay(false);
   updateCounts();
+  renderStudyList();
   renderReviewTable();
   renderAggregatePanel();
   renderICFPanel();
@@ -1184,7 +1246,7 @@ function renderReviewTable() {
       <td>${esc(r.reporterCausality)}</td>
       <td>${esc(r.companyCausality)}</td>
       <td class="editable-cell" onclick="editCell(this, ${i}, 'dsmcDate')">${esc(r.dsmcDate) || '<span style="color:var(--text-3)">—</span>'}</td>
-      <td style="max-width:160px;">${renderICFTermsCell(r.icfTerms)}</td>
+      <td class="editable-cell" style="max-width:160px;" onclick="editICFTerm(this,${i})" title="Click to edit ICF term">${renderICFTermsCell(r.icfTerms)}</td>
       <td class="editable-cell" onclick="editLocalChange(this, ${i})">${renderLocalChange(r.localChange, i)}</td>
       <td style="text-align:center;">${priorBadge(r.priorCount)}</td>
     </tr>`).join('');
@@ -1236,8 +1298,37 @@ function editCell(td, idx, field) {
   td.innerHTML = '';
   td.appendChild(input);
   input.focus();
-  input.onblur = () => { if (rows[idx]) { rows[idx][field] = input.value; renderReviewTable(); } };
+  input.onblur = () => {
+    if (rows[idx]) {
+      rows[idx][field] = input.value;
+      if (state.activeStudy) { state.sessionStore[state.activeStudy] = state.sessionRows.flat(); persist(); }
+      renderReviewTable();
+    }
+  };
   input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
+}
+
+function editICFTerm(td, idx) {
+  const rows = state.sessionRows.flat();
+  const cur = rows[idx] ? rows[idx].icfTerms : '';
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.value = cur.startsWith('N/A') ? '' : cur;
+  input.placeholder = 'Enter ICF lay term...';
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.onblur = () => {
+    if (rows[idx]) {
+      rows[idx].icfTerms = input.value.trim() || cur;
+      if (input.value.trim()) rows[idx].localChange = rows[idx].localChange || 'No';
+      if (state.activeStudy) { state.sessionStore[state.activeStudy] = state.sessionRows.flat(); persist(); }
+      renderStudyList();
+      renderReviewTable();
+      renderICFPanel();
+    }
+  };
+  input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { td.innerHTML = renderICFTermsCell(cur); } };
 }
 
 function editLocalChange(td, idx) { /* handled by select */ }
@@ -1481,6 +1572,7 @@ function clearSession() {
   state.sessionRows = [];
   if (state.activeStudy) { delete state.sessionStore[state.activeStudy]; persist(); }
   state.pdfQueue = [];
+  renderStudyList();
   document.getElementById('pdf-queue').innerHTML = '';
   // Reload historical rows for current study from store
   if (state.activeStudy && state.trackerStore[state.activeStudy]) {
